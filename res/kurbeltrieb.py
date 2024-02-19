@@ -16,6 +16,7 @@ TIMESTEPS_PER_ROTATION = 51
 DIGITS = 5
 EPS_TOL = 10. ** (-DIGITS)
 PLEUEL_DISCRETISATION = 10
+TIME_DISCRETISATION = 1000.
 
 
 class PltObject:
@@ -152,14 +153,10 @@ class Kurbeltrieb:
 
         self.t = [0.]  # initial time for animation
 
-
     def alpha(self, t):
         """KUW angular position from OT as a function of time."""
-        # if isinstance(t, float):
-        #     if t < 0.:
-        #         raise ValueError('Each time t must be greater than 0')
-        # elif not all(t >= 0.):
-        #     raise ValueError('Each time t must be greater than 0')
+        if isinstance(t, float):
+            t = np.array([t], dtype=float)
         alpha = self.omega * t
         return np.array([alpha], dtype=float).flatten()
 
@@ -167,31 +164,30 @@ class Kurbeltrieb:
         """kolben - pleuel x, y position as a function of time."""
         h_x = (self.h / 2) * np.sin(self.alpha(t))
         h_y = (self.h / 2) * np.cos(self.alpha(t))
-        return np.array([h_x, h_y], dtype=float)
+        return h_x.flatten(), h_y.flatten()
 
     def alpha_g(self, t):
         """KUW global angle in GCS"""
         h_x, h_y = self.hubzapfen_xy(t)
+
         alpha = np.arctan2(h_y, h_x)
         return np.array([alpha], dtype=float).flatten()
 
     def kolben_xy(self, t):
         """kolben x, y position as a function of time"""
         A = self.alpha(t)
-        if isinstance(t, float):
-            k_x = np.array([0.], dtype=float)
-        else:
-            k_x = np.zeros(t.shape)
+        k_x = np.zeros(A.shape[0])
 
         sqr = (self.p ** 2 - (self.h / 2) ** 2 * (np.sin(A) ** 2)) ** 0.5
         k_y = (self.h / 2) * np.cos(A) + sqr
 
-        return np.array([k_x, k_y], dtype=float)
+        return k_x.flatten(), k_y.flatten()
 
     def beta(self, t):
         """angular position of pleuel (angle from y axis)  as a function of time."""
         h_x, h_y = self.hubzapfen_xy(t)
         k_x, k_y = self.kolben_xy(t)
+
         dx = k_x - h_x
         dy = k_y - h_y
         beta = np.arctan2(k_y - h_y, k_x - h_x) - np.pi / 2
@@ -200,41 +196,33 @@ class Kurbeltrieb:
     def kolben_vxy(self, t):
         """kolben speed as a function of time"""
         A = self.alpha(t)
-        dt = (1 / self.omega) / 1000.
+        dt = (1 / self.omega) / TIME_DISCRETISATION
         if isinstance(t, float):
             v_x = np.array([0.], dtype=float)
-            # t = np.array([t - dt / 2, t + dt / 2], dtype=float)
             t1 = np.array([t - dt / 2], dtype=float)
             t2 = np.array([t + dt / 2], dtype=float)
         else:
             v_x = np.zeros(t.shape)
-            # t = np.hstack([t, [t[-1] + dt]])
             t1 = t - dt / 2
             t2 = t + dt / 2
-        # k_y = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t]], dtype=float).flatten()
-        # v_y = (k_y[1:] - k_y[:-1]) / (t[1:] - t[:-1])
+
         k_y1 = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t1]], dtype=float).flatten()
         k_y2 = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t2]], dtype=float).flatten()
         v_y = (k_y2 - k_y1) / dt
-        return np.array([v_x, v_y], dtype=float)
+        return v_x.flatten(), v_y.flatten()
 
     def kolben_axy(self, t):
         """kolben acceleration as a function of time"""
         A = self.alpha(t)
-        dt = (1 / self.omega) / 1000.
+        dt = (1 / self.omega) / TIME_DISCRETISATION
         if isinstance(t, float):
             a_x = np.array([0.], dtype=float)
-            # t = np.array([t - dt / 2, t + dt / 2], dtype=float)
             t1 = np.array([t - dt / 2], dtype=float)
             t2 = np.array([t + dt / 2], dtype=float)
         else:
-            a_x = np.zeros(t.shape)
-            # t = np.hstack([t, [t[-1] + dt]])
+            a_x = np.zeros(t.shape[0])
             t1 = t - dt / 2
             t2 = t + dt / 2
-
-        # v_y = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t]], dtype=float).flatten()
-        # a_y = (v_y[1:] - v_y[:-1]) / (t[1:] - t[:-1])
 
         v_y1 = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t1]], dtype=float).flatten()
         v_y2 = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t2]], dtype=float).flatten()
@@ -246,14 +234,14 @@ class Kurbeltrieb:
         gamma = a / r
         a_confluence = a * (self.omega ** 2) * (np.cos(A) + gamma * np.cos(2 * A))
         # return a_x, a_y, a_confluence
-        return np.array([a_x, a_y], dtype=float)
+        return a_x.flatten(), a_y.flatten()
 
     def pleuel_xy(self, t, position: float = 0.5):
         """position of a point on pleuel in time"""
         hx, hy = self.hubzapfen_xy(t)
         kx, ky = self.kolben_xy(t)
 
-        return np.array([hx + (kx - hx) * position, hy + (ky - hy) * position], dtype=float)
+        return (hx + (kx - hx) * position).flatten(), (hy + (ky - hy) * position).flatten()
 
 
     def kolben_Fxy(self, t):
@@ -261,13 +249,14 @@ class Kurbeltrieb:
         # A = self.alpha(t)
         k_x, k_y = self.kolben_xy(t)
         a_x, a_y = self.kolben_axy(t)
+
         beta = self.beta(t)
 
         F_y = - a_y * self.m_k
         F_x = - F_y * np.tan(beta)
         M_z = F_x * k_x
 
-        return np.array([F_x, F_y, M_z], dtype=float)
+        return F_x.flatten(), F_y.flatten(), M_z.flatten()
 
     def wange_Fxy(self, t):
         """forces from wange motion acting on the KUW bearings"""
@@ -278,7 +267,7 @@ class Kurbeltrieb:
         W_x = W_r * np.cos(gamma)
         W_y = W_r * np.sin(gamma)
 
-        return np.array([W_x, W_y], dtype=float)
+        return W_x.flatten(), W_y.flatten()
 
     def pleuel_Fxy(self, t):
         """forces from pleuel movement acting on KUW bearings"""
@@ -336,7 +325,7 @@ class Kurbeltrieb:
 
         xy = self.pleuel_xy(t     , position=r / self.p)
 
-        return Psum.T, xy
+        return (Psum[:,0].flatten(), Psum[:,1].flatten()), np.array(xy, dtype=float)
 
     def lager_Fxy(self, t):
         """forces from wange and kolben acting on the KUW bearings"""
@@ -346,7 +335,7 @@ class Kurbeltrieb:
 
         Px, Py = np.sum(Pxy, axis=0)
 
-        return np.array([Wx + Fx + Px, Wy + Fy + Py], dtype=float)
+        return (Wx + Fx + Px).flatten(), (Wy + Fy + Py).flatten()
 
     def animate_kurbeltrieb(self, num_rotations: int = 2, filename: str = None):
         end_time = int(num_rotations) * ((2 * np.pi) / self.omega)
@@ -367,6 +356,7 @@ class Kurbeltrieb:
         Pxy, Ppos = self.pleuel_Fxy(self.t)
 
         Px, Py = Pxy
+        Pxy = np.array(Pxy, dtype=float)
 
         Rx = Fx + Wx + Px
         Ry = Fy + Wy + Py
