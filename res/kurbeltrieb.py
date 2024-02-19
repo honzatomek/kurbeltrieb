@@ -364,8 +364,8 @@ class Kurbeltrieb:
 
         kraft_scale = self.p / (2 * (Wx[0] ** 2. + Wy[0] ** 2) ** 0.5)
 
-        fig = plt.figure(figsize=(18, 8))
-        gspec = gs.GridSpec(3, 6, wspace=0.30)
+        fig = plt.figure(figsize=(17, 8))
+        gspec = gs.GridSpec(3, 6, wspace=0.35)
 
         ax_2d = fig.add_subplot(gspec[:, :2])
 
@@ -447,15 +447,15 @@ class Kurbeltrieb:
         kolben_vy, = ax_v.plot(self.t[0], vy[0], color="blue", label=r"$v_{y,k}$")
         kolben_ay, = ax_a.plot(self.t[0], ay[0], color="orange", label=r"$a_{y,k}$")
 
-        kolben_Fx, = ax_f.plot(self.t[0], Fx[0], color="red", linestyle="--", label=r"$K_x$")
-        kolben_Fy, = ax_f.plot(self.t[0], Fy[0], color="red", label=r"$K_y$")
-        wange_Fx,  = ax_f.plot(self.t[0], Wx[0], color="blue", linestyle="--", label=r"$W_x$")
-        wange_Fy,  = ax_f.plot(self.t[0], Wy[0], color="blue", label=r"$W_y$")
-        pleuel_Fx, = ax_f.plot(self.t[0], Px[0], color="orange", linestyle="--", label=r"$P_x$")
-        pleuel_Fy, = ax_f.plot(self.t[0], Py[0], color="orange", label=r"$P_y$")
+        kolben_Fx, = ax_f.plot(self.t[0], Fx[0], color="red", linestyle="--", label=r"$K_{x}$")
+        kolben_Fy, = ax_f.plot(self.t[0], Fy[0], color="red", label=r"$K_{y}$")
+        wange_Fx,  = ax_f.plot(self.t[0], Wx[0], color="blue", linestyle="--", label=r"$W_{x}$")
+        wange_Fy,  = ax_f.plot(self.t[0], Wy[0], color="blue", label=r"$W_{y}$")
+        pleuel_Fx, = ax_f.plot(self.t[0], Px[0], color="orange", linestyle="--", label=r"$P_{x}$")
+        pleuel_Fy, = ax_f.plot(self.t[0], Py[0], color="orange", label=r"$P_{y}$")
 
-        kuw_Rx, = ax_r.plot(self.t[0], Rx[0], color="black", linestyle="--", label=r"$R_x=K_x+W_x+P_x$")
-        kuw_Ry, = ax_r.plot(self.t[0], Ry[0], color="black", label=r"$R_y$=K_y+W_y+P_y")
+        kuw_Rx, = ax_r.plot(self.t[0], Rx[0], color="black", linestyle="--", label=r"$R_{x}=K_{x}+W_{x}+P_{x}$")
+        kuw_Ry, = ax_r.plot(self.t[0], Ry[0], color="black", label=r"$R_{y}=K_{y}+W_{y}+P_{y}$")
         kuw_Rr, = ax_r.plot(self.t[0], Rr[0], color="black", linestyle=":", label=r"$\sqrt{R_{x}^{2}+R_{y}^{2}}$")
 
         ax_v.plot([self.t[0], self.t[-1]], [0., 0.], linewidth=1, color="black", zorder=-1)
@@ -474,6 +474,7 @@ class Kurbeltrieb:
         ax_a.set_ylabel("Kolben Acceleration", color="orange")
         ax_f.set_ylabel("Inertia Forces on KUW")
         ax_r.set_ylabel("Resulting Forces on KUW")
+        ax_r.set_xlabel("Time")
         lns = [kolben_xy, kolben_vy, kolben_ay]
         lab = [l.get_label() for l in lns]
         ax_a.legend(lns, lab, loc="best")
@@ -527,6 +528,8 @@ class Kurbeltrieb:
         ax_c.legend(loc="upper left")
         ax_c.set_xlabel("Force x component")
         ax_c.set_ylabel("Force y component")
+        ax_c.yaxis.set_label_position("right")
+        ax_c.yaxis.tick_right()
         ax_c.set_aspect("equal")
 
         # ax_c.set_xlim([-1.2 * Fmaxabs, 1.2 * Fmaxabs])
