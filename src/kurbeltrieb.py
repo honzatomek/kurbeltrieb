@@ -191,8 +191,9 @@ def concat(x, y, a):
 
 
 class Part:
-    def __init__(self, name: str, body: me.Body, inertia_frame: me.ReferenceFrame):
+    def __init__(self, name: str, parent, body: me.Body, inertia_frame: me.ReferenceFrame):
         self.name = name
+        self.parent = parent
         self.body = body
         self.N = inertia_frame
 
@@ -502,25 +503,25 @@ class Kurbeltrieb:
         KUW.frame.set_ang_vel(N.frame, dir * ukuw * N.frame.z)
         KUW.masscenter.set_pos(N.masscenter, 0.)
         KUW.masscenter.set_vel(N.frame, 0.)
-        self.KUW = Wange("Kurbelwelle", KUW, N)
+        self.KUW = Wange("Kurbelwelle", self, KUW, N)
 
         logger.debug("Setting Wange.")
         WNG = me.Body("WNG", mass=mKUW, frame=KUW.frame)
         WNG.masscenter.set_pos(KUW.masscenter, -eKUW * KUW.frame.y)
         WNG.masscenter.v2pt_theory(WNG.masscenter, N.frame, KUW.frame)
-        self.WNG = Pin("Wange", WNG, N)
+        self.WNG = Pin("Wange", self, WNG, N)
 
         logger.debug("Setting Unwucht.")
         UNW = me.Body("UNW", mass=mUNW, frame=KUW.frame.orientnew("UNW_{ref}", "Axis", (sm.pi / 2 + aUNW, KUW.frame.z)))
         UNW.masscenter.set_pos(KUW.masscenter, rUNW * UNW.frame.x)
         UNW.masscenter.v2pt_theory(KUW.masscenter, N.frame, KUW.frame)
-        self.UNW = Pin("Unwucht", UNW, N)
+        self.UNW = Pin("Unwucht", self, UNW, N)
 
         logger.debug("Setting Hubzapfen.")
         HZP = me.Body("HZP", frame=N.frame)
         HZP.masscenter.set_pos(KUW.masscenter, rKUW * KUW.frame.y)
         HZP.masscenter.v2pt_theory(KUW.masscenter, N.frame, KUW.frame)
-        self.HZP = Pin("Hubzapfen", HZP, N)
+        self.HZP = Pin("Hubzapfen", self, HZP, N)
 
         logger.debug("Setting Pleuel.")
         PLE = me.Body("PLE", frame=N.frame.orientnew("PLE_{ref}", "Axis", (qple, N.frame.z)))
@@ -528,20 +529,20 @@ class Kurbeltrieb:
         PLE.frame.set_ang_vel(N.frame, uple * N.frame.z)
         PLE.masscenter.set_pos(HZP.masscenter, ePLE * PLE.frame.x)
         PLE.masscenter.v2pt_theory(HZP.masscenter, N.frame, PLE.frame)
-        self.PLE = Pleuel("Pleuel", PLE, N)
+        self.PLE = Pleuel("Pleuel", self, PLE, N)
 
         logger.debug("Setting Bolzen.")
         BLZ = me.Body("BLZ", frame=N.frame)
         BLZ.masscenter.set_pos(HZP.masscenter, lPLE * PLE.frame.x)
         BLZ.masscenter.v2pt_theory(HZP.masscenter, N.frame, PLE.frame)
-        self.BLZ = Pin("Bolzen", BLZ, N)
+        self.BLZ = Pin("Bolzen", self, BLZ, N)
 
         logger.debug("Setting Kolben.")
         KOL = me.Body("KOL", mass=mKOL, frame=N.frame)
         KOL.masscenter.central_inertia = me.inertia(KOL.frame, 0, 0, JKOL)
         KOL.masscenter.set_pos(BLZ.masscenter, 0.)
         KOL.masscenter.v2pt_theory(BLZ.masscenter, N.frame, PLE.frame)
-        self.KOL = Kolben("Kolben", KOL, N)
+        self.KOL = Kolben("Kolben", self, KOL, N)
 
         logger.debug("Generalised Derivatives replacements.")
         qd_repl  = {qkuw.diff(t): ukuw, qple.diff(t): uple}
@@ -612,22 +613,22 @@ class Kurbeltrieb:
         fig = plt.figure(figsize=(18, 10))
         fig.suptitle("Kurbeltrieb")
 
-        gspec = gs.GridSpec(3, 5, wspace=0.5, hspace=0.2)
+        gspec = gs.GridSpec(3, 6, wspace=0.5, hspace=0.2)
 
         ax  = fig.add_subplot(gspec[:,  :2])
-        axd = fig.add_subplot(gspec[0, 2:-1])
+        axd = fig.add_subplot(gspec[0, 2:-2])
         axv = axd.twinx()
         axa = axd.twinx()
         axa.spines.right.set_position(("axes", 1.3))
 
-        axf = fig.add_subplot(gspec[1, 2:-1])
+        axf = fig.add_subplot(gspec[1, 2:-2])
+        axr = fig.add_subplot(gspec[2, 2:-2])
+
+        axc = fig.add_subplot(gspec[1:3, -2:])
 
         axd.set_ylabel("Kolben Displacement", color="red")
         axv.set_ylabel("Kolben Velocity",     color="blue")
         axa.set_ylabel("Kolben Acceleration", color="orange")
-
-        # axv = fig.add_subplot(gspec[1,3:-1])
-        # axa = fig.add_subplot(gspec[2,3:-1])
 
         for body in self.bodies:
             body.set_plotting(ax)
@@ -639,6 +640,8 @@ class Kurbeltrieb:
         ukuw = np.array([speed] * qkuw.shape[0], dtype=float)
         akuw = np.array([0.] * qkuw.shape[0], dtype=float)
 
+        dkuw = np.degrees(qkuw)
+
         for body in self.bodies:
             body.plot(akuw[0], ukuw[0], qkuw[0])
 
@@ -648,22 +651,20 @@ class Kurbeltrieb:
 
         qhzp = self.HZP.pos(akuw, ukuw, qkuw)
 
-        dky, = axd.plot(qkuw[0], qkol[0, 1], color="red",    label="$d_{y,kolben}$")
-        vky, = axv.plot(qkuw[0], vkol[0, 1], color="blue",   label="$v_{y,kolben}$")
-        aky, = axa.plot(qkuw[0], akol[0, 1], color="orange", label="$a_{y,kolben}$")
+        dky, = axd.plot(dkuw[0], qkol[0, 1], color="red",    label="$d_{y,kolben}$")
+        vky, = axv.plot(dkuw[0], vkol[0, 1], color="blue",   label="$v_{y,kolben}$")
+        aky, = axa.plot(dkuw[0], akol[0, 1], color="orange", label="$a_{y,kolben}$")
 
         ax.set_xlim(2.5 * np.min(qhzp[:,0]), 2.5 * np.max(qhzp[:,0]))
         ax.set_ylim(2.5 * np.min(qhzp[:,1]), 1.5 * np.max(qkol[:,1]))
         ax.set_aspect("equal")
 
-        axd.set_xlim(np.min(qkuw), np.max(qkuw))
-        axv.set_xlim(np.min(qkuw), np.max(qkuw))
-        axa.set_xlim(np.min(qkuw), np.max(qkuw))
-
         for ax_, v in zip([axd, axv, axa], [qkol[:,1], vkol[:,1], akol[:,1]]):
             n, x = np.min(v), np.max(v)
             dv = np.abs(x - n)
+            ax_.set_xlim(np.min(dkuw), np.max(dkuw))
             ax_.set_ylim(n - 0.1 * dv, x + 0.1 * dv)
+
         axd.legend([dky, vky, aky], [k.get_label() for k in [dky, vky, aky]])
 
         def animate(frame):
@@ -671,9 +672,9 @@ class Kurbeltrieb:
             for body in self.bodies:
                 body.plot(akuw[frame], ukuw[frame], qkuw[frame])
 
-            dky.set_data(qkuw[:frame+1], qkol[:frame+1,1])
-            vky.set_data(qkuw[:frame+1], vkol[:frame+1,1])
-            aky.set_data(qkuw[:frame+1], akol[:frame+1,1])
+            dky.set_data(dkuw[:frame+1], qkol[:frame+1,1])
+            vky.set_data(dkuw[:frame+1], vkol[:frame+1,1])
+            aky.set_data(dkuw[:frame+1], akol[:frame+1,1])
 
             return dky, vky, aky
 
@@ -713,5 +714,5 @@ if __name__ == "__main__":
     kt = Kurbeltrieb()
     kt.lambdify()
     kt.set_p(default_kurbeltrieb)
-    kt.animate(3)
+    kt.animate(1)
 
