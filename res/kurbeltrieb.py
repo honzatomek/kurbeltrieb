@@ -203,12 +203,19 @@ class Kurbeltrieb:
         dt = (1 / self.omega) / 1000.
         if isinstance(t, float):
             v_x = np.array([0.], dtype=float)
-            t = np.array([t, t + dt], dtype=float)
+            # t = np.array([t - dt / 2, t + dt / 2], dtype=float)
+            t1 = np.array([t - dt / 2], dtype=float)
+            t2 = np.array([t + dt / 2], dtype=float)
         else:
             v_x = np.zeros(t.shape)
-            t = np.hstack([t, [t[-1] + dt]])
-        k_y = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t]], dtype=float).flatten()
-        v_y = (k_y[1:] - k_y[:-1]) / (t[1:] - t[:-1])
+            # t = np.hstack([t, [t[-1] + dt]])
+            t1 = t - dt / 2
+            t2 = t + dt / 2
+        # k_y = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t]], dtype=float).flatten()
+        # v_y = (k_y[1:] - k_y[:-1]) / (t[1:] - t[:-1])
+        k_y1 = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t1]], dtype=float).flatten()
+        k_y2 = np.array([yy for xx, yy in [self.kolben_xy(tt) for tt in t2]], dtype=float).flatten()
+        v_y = (k_y2 - k_y1) / dt
         return np.array([v_x, v_y], dtype=float)
 
     def kolben_axy(self, t):
@@ -217,13 +224,21 @@ class Kurbeltrieb:
         dt = (1 / self.omega) / 1000.
         if isinstance(t, float):
             a_x = np.array([0.], dtype=float)
-            t = np.array([t, t + dt], dtype=float)
+            # t = np.array([t - dt / 2, t + dt / 2], dtype=float)
+            t1 = np.array([t - dt / 2], dtype=float)
+            t2 = np.array([t + dt / 2], dtype=float)
         else:
             a_x = np.zeros(t.shape)
-            t = np.hstack([t, [t[-1] + dt]])
+            # t = np.hstack([t, [t[-1] + dt]])
+            t1 = t - dt / 2
+            t2 = t + dt / 2
 
-        v_y = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t]], dtype=float).flatten()
-        a_y = (v_y[1:] - v_y[:-1]) / (t[1:] - t[:-1])
+        # v_y = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t]], dtype=float).flatten()
+        # a_y = (v_y[1:] - v_y[:-1]) / (t[1:] - t[:-1])
+
+        v_y1 = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t1]], dtype=float).flatten()
+        v_y2 = np.array([yy for xx, yy in [self.kolben_vxy(tt) for tt in t2]], dtype=float).flatten()
+        a_y = (v_y2 - v_y1) / dt
 
         a = self.h / 2
         r = self.p
@@ -318,11 +333,6 @@ class Kurbeltrieb:
                     r[i] = r[i+1]
                 else:
                     r[i] = r[i-1]
-
-        # fig = plt.figure()
-        # ax = fig.add_subplot()
-        # ax.plot(radius, Pperp[:,10])
-        # plt.show()
 
         xy = self.pleuel_xy(t     , position=r / self.p)
 
@@ -455,7 +465,7 @@ class Kurbeltrieb:
         pleuel_Fy, = ax_f.plot(self.t[0], Py[0], color="orange", label=r"$P_{y}$")
 
         kuw_Rx, = ax_r.plot(self.t[0], Rx[0], color="black", linestyle="--", label=r"$R_{x}=K_{x}+W_{x}+P_{x}$")
-        kuw_Ry, = ax_r.plot(self.t[0], Ry[0], color="black", label=r"$R_{y}=K_{y}+W_{y}+P_{y}$")
+        kuw_Ry, = ax_r.plot(self.t[0], Ry[0], color="black", label=r"$R_{y} = K_{y}+W_{y}+P_{y}$")
         kuw_Rr, = ax_r.plot(self.t[0], Rr[0], color="black", linestyle=":", label=r"$\sqrt{R_{x}^{2}+R_{y}^{2}}$")
 
         ax_v.plot([self.t[0], self.t[-1]], [0., 0.], linewidth=1, color="black", zorder=-1)
@@ -702,5 +712,4 @@ if __name__ == "__main__":
                      m_pleuel = conrod_mass)
 
     kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
-    # kt.plot_forces()
 
