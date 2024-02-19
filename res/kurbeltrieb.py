@@ -1,10 +1,15 @@
 #!/usr/bin/python3
 
+import os
+import sys
 import numpy as np
+import warnings
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import matplotlib.patches as patches
 import matplotlib.animation as animation
+
+warnings.filterwarnings("ignore")
 
 
 TIMESTEPS_PER_ROTATION = 51
@@ -355,39 +360,40 @@ class Kurbeltrieb:
 
         Rx = Fx + Wx + Px
         Ry = Fy + Wy + Py
+        Rr = (Rx ** 2 + Ry ** 2) ** 0.5
 
         kraft_scale = self.p / (2 * (Wx[0] ** 2. + Wy[0] ** 2) ** 0.5)
 
-
-        fig = plt.figure(figsize=(18, 10))
-        gspec = gs.GridSpec(3, 5)
+        fig = plt.figure(figsize=(18, 8))
+        gspec = gs.GridSpec(3, 6, wspace=0.30)
 
         ax_2d = fig.add_subplot(gspec[:, :2])
-        ax_k  = fig.add_subplot(gspec[0, 2:-1])
-        # ax_v  = fig.add_subplot(gspec[1, 2:])
-        # ax_a  = fig.add_subplot(gspec[2, 2:])
+
+        ax_k  = fig.add_subplot(gspec[0, 2:-2])
         ax_v = ax_k.twinx()
         ax_a = ax_k.twinx()
-        ax_a.spines.right.set_position(("axes", 1.2))
-        ax_f  = fig.add_subplot(gspec[1, 2:-1])
-        ax_r  = fig.add_subplot(gspec[2, 2:-1])
+        ax_a.spines.right.set_position(("axes", 1.3))
+
+        ax_f  = fig.add_subplot(gspec[1, 2:-2])
+        ax_r  = fig.add_subplot(gspec[2, 2:-2])
+
+        ax_c  = fig.add_subplot(gspec[1:, -2:])
 
         ax_2d.set_xlim([-1.5 * self.h, 1.5 * self.h])
         ax_2d.set_ylim([-2* self.h, 2 * self.h + self.p])
         ax_2d.set_aspect("equal")
 
-
         wange = Wange(ax_2d, {"closed":       True,
                               "fill":         True,
-                              "edgecolor": "black",
+                              "edgecolor": "white",
                               "facecolor": "black",
-                              "zorder":          0})
+                              "zorder":         25})
 
         kolben = Kolben(ax_2d, {"closed":       True,
                                 "fill":         True,
                                 "edgecolor": "black",
                                 "facecolor": "black",
-                                "zorder":         25})
+                                "zorder":         0})
 
         pleuel = Pleuel(ax_2d, {"closed":       True,
                                 "fill":         True,
@@ -399,13 +405,13 @@ class Kurbeltrieb:
                               "fill":         True,
                               "edgecolor": "white",
                               "facecolor": "white",
-                              "zorder":         26}, diameter=12.)
+                              "zorder":         27}, diameter=12.)
 
         hubzapfen = Pin(ax_2d, {"closed":       True,
                                 "fill":         True,
                                 "edgecolor": "white",
                                 "facecolor": "white",
-                                "zorder":          5}, diameter=12.)
+                                "zorder":         27}, diameter=12.)
 
         kkraft = Vector(ax_2d, {"color": "red",
                                 "shape": "full",
@@ -417,7 +423,7 @@ class Kurbeltrieb:
                                 "shape": "full",
                                 "length_includes_head": True,
                                 "head_width": 5.,
-                                "zorder":  1})
+                                "zorder":  26})
 
         pkraft = Vector(ax_2d, {"color": "orange",
                                 "shape": "full",
@@ -437,20 +443,20 @@ class Kurbeltrieb:
 
         pkraft.plot(Ppos[:,0], Pxy[:,0], kraft_scale)
 
+        kolben_xy, = ax_k.plot(self.t[0], ky[0], color="red", label=r"$y_k$")
+        kolben_vy, = ax_v.plot(self.t[0], vy[0], color="blue", label=r"$v_{y,k}$")
+        kolben_ay, = ax_a.plot(self.t[0], ay[0], color="orange", label=r"$a_{y,k}$")
 
-        kolben_xy, = ax_k.plot(self.t[0], ky[0], color="red", label="k_y")
-        kolben_vy, = ax_v.plot(self.t[0], vy[0], color="blue", label="v_y")
-        kolben_ay, = ax_a.plot(self.t[0], ay[0], color="orange", label="a_y")
+        kolben_Fx, = ax_f.plot(self.t[0], Fx[0], color="red", linestyle="--", label=r"$K_x$")
+        kolben_Fy, = ax_f.plot(self.t[0], Fy[0], color="red", label=r"$K_y$")
+        wange_Fx,  = ax_f.plot(self.t[0], Wx[0], color="blue", linestyle="--", label=r"$W_x$")
+        wange_Fy,  = ax_f.plot(self.t[0], Wy[0], color="blue", label=r"$W_y$")
+        pleuel_Fx, = ax_f.plot(self.t[0], Px[0], color="orange", linestyle="--", label=r"$P_x$")
+        pleuel_Fy, = ax_f.plot(self.t[0], Py[0], color="orange", label=r"$P_y$")
 
-        kolben_Fx, = ax_f.plot(self.t[0], Fx[0], color="red", linestyle="--", label="K_x")
-        kolben_Fy, = ax_f.plot(self.t[0], Fy[0], color="red", label="K_y")
-        wange_Fx,  = ax_f.plot(self.t[0], Wx[0], color="blue", linestyle="--", label="W_x")
-        wange_Fy,  = ax_f.plot(self.t[0], Wy[0], color="blue", label="W_y")
-        pleuel_Fx, = ax_f.plot(self.t[0], Px[0], color="orange", linestyle="--", label="P_x")
-        pleuel_Fy, = ax_f.plot(self.t[0], Py[0], color="orange", label="P_y")
-
-        kuw_Rx, = ax_r.plot(self.t[0], Rx[0], label="R_x")
-        kuw_Ry, = ax_r.plot(self.t[0], Ry[0], label="R_y")
+        kuw_Rx, = ax_r.plot(self.t[0], Rx[0], color="black", linestyle="--", label=r"$R_x=K_x+W_x+P_x$")
+        kuw_Ry, = ax_r.plot(self.t[0], Ry[0], color="black", label=r"$R_y$=K_y+W_y+P_y")
+        kuw_Rr, = ax_r.plot(self.t[0], Rr[0], color="black", linestyle=":", label=r"$\sqrt{R_{x}^{2}+R_{y}^{2}}$")
 
         ax_v.plot([self.t[0], self.t[-1]], [0., 0.], linewidth=1, color="black", zorder=-1)
         ax_f.plot([self.t[0], self.t[-1]], [0., 0.], linewidth=1, color="black", zorder=-1)
@@ -461,8 +467,8 @@ class Kurbeltrieb:
             ax.set_xlim([0., self.t[-1]])
             minv, maxv = np.min(v), np.max(v)
             ax.set_ylim([minv - 0.1 * np.abs(maxv - minv), maxv + 0.1 * np.abs(maxv - minv)])
-            # ax.set_ylabel(lab)
-            # ax.legend()
+            ax.locator_params(axis="y", nbins=7)
+
         ax_k.set_ylabel("Kolben Displacement", color="red")
         ax_v.set_ylabel("Kolben Velocity", color="blue")
         ax_a.set_ylabel("Kolben Acceleration", color="orange")
@@ -474,7 +480,70 @@ class Kurbeltrieb:
         ax_f.legend()
         ax_r.legend()
 
+
+#-----------------------------------------------------------------------------------------------#
+        Fmax = np.max([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry])
+        Fmin = np.min([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry])
+        Fmaxabs = np.max([np.abs(Fmin), np.abs(Fmax)])
+
+        k_now = Pin(ax_c, {"closed":       True,
+                           "fill":         True,
+                           "edgecolor": "red",
+                           "facecolor": "red",
+                           "zorder":       0}, diameter=Fmaxabs / 20)
+
+        w_now = Pin(ax_c, {"closed":       True,
+                           "fill":         True,
+                           "edgecolor": "blue",
+                           "facecolor": "blue",
+                           "zorder":       0}, diameter=Fmaxabs / 20)
+
+        p_now = Pin(ax_c, {"closed":       True,
+                           "fill":         True,
+                           "edgecolor": "orange",
+                           "facecolor": "orange",
+                           "zorder":       0}, diameter=Fmaxabs / 20)
+
+        r_now = Pin(ax_c, {"closed":       True,
+                           "fill":         True,
+                           "edgecolor": "black",
+                           "facecolor": "black",
+                           "zorder":       0}, diameter=Fmaxabs / 20)
+
+        ts = TIMESTEPS_PER_ROTATION + 1
+
+        kolben_c, = ax_c.plot(Fx[:ts], Fy[:ts], color="red", label=r"$F_{kolben}$")
+        k_now.plot([Fx[0], Fy[0]], 0.)
+
+        wange_c,  = ax_c.plot(Wx[:ts], Wy[:ts], color="blue", label=r"$F_{wange}$")
+        w_now.plot([Wx[0], Wy[0]], 0.)
+
+        pleuel_c, = ax_c.plot(Px[:ts], Py[:ts], color="orange", label=r"$F_{pleuel}$")
+        p_now.plot([Px[0], Py[0]], 0.)
+
+        kuw_c,    = ax_c.plot(Rx[:ts], Ry[:ts], color="black", label=r"$R = \sum{F}$")
+        r_now.plot([Rx[0], Ry[0]], 0.)
+
+        ax_c.legend(loc="upper left")
+        ax_c.set_xlabel("Force x component")
+        ax_c.set_ylabel("Force y component")
+        ax_c.set_aspect("equal")
+
+        # ax_c.set_xlim([-1.2 * Fmaxabs, 1.2 * Fmaxabs])
+        # ax_c.set_ylim([-1.2 * Fmaxabs, 1.2 * Fmaxabs])
+        x_lim = ax_c.get_xlim()
+        y_lim = ax_c.get_ylim()
+
+        ax_c.plot(x_lim, [0., 0.], linewidth=1, color="black", zorder=-1)
+        ax_c.plot([0., 0.], y_lim, linewidth=1, color="black", zorder=-1)
+
+        ax_c.set_xlim(x_lim)
+        ax_c.set_ylim(y_lim)
+
+#-----------------------------------------------------------------------------------------------#
+
         fig.suptitle("Kurbeltrieb Inertia Forces decomposition using Numerical Analysis")
+        fig.tight_layout()
 
 
         def animate(frame: int):
@@ -491,22 +560,27 @@ class Kurbeltrieb:
             pkraft.plot(Ppos[:,frame], Pxy[:,frame], kraft_scale)
 
             for plot, vals in zip([kolben_xy, kolben_vy, kolben_ay, kolben_Fx, kolben_Fy,
-                                   wange_Fx, wange_Fy, pleuel_Fx, pleuel_Fy, kuw_Rx, kuw_Ry],
-                                  [ky, vy, ay, Fx, Fy, Wx, Wy, Px, Py, Rx, Ry]):
+                                   wange_Fx, wange_Fy, pleuel_Fx, pleuel_Fy, kuw_Rx, kuw_Ry, kuw_Rr],
+                                  [ky, vy, ay, Fx, Fy, Wx, Wy, Px, Py, Rx, Ry, Rr]):
                 plot.set_data(self.t[:frame+1], vals[:frame+1])
 
-            return kolben, wange, pleuel, hubzapfen, kkraft, wkraft
+            k_now.plot([Fx[frame], Fy[frame]], 0.)
+            w_now.plot([Wx[frame], Wy[frame]], 0.)
+            p_now.plot([Px[frame], Py[frame]], 0.)
+            r_now.plot([Rx[frame], Ry[frame]], 0.)
+
+            return kolben, wange, pleuel, hubzapfen, kkraft, wkraft, k_now, w_now, p_now, r_now
 
         ani = animation.FuncAnimation(fig, animate, interval=100., frames=len(self.t), repeat=True)
 
         if filename is not None:
             print(f"[+] Saving animation to: {filename:s}.")
-            writergif = animation.PillowWriter(fps=30)
+            writergif = animation.PillowWriter(fps=10)
             ani.save(filename, writer=writergif)
 
         plt.show(block=True)
 
-    def plot_forces(self):
+    def plot_forces(self, filename: str = None):
         end_time = ((2 * np.pi) / self.omega)
 
         dt = (2 * np.pi) / self.omega / TIMESTEPS_PER_ROTATION
@@ -522,39 +596,90 @@ class Kurbeltrieb:
         fig = plt.figure()
         ax = fig.add_subplot()
 
-        R = (Rx ** 2 + Ry ** 2) ** 0.5
-        Rmax = np.max(R)
+        Fmax = np.max([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry])
+        Fmin = np.min([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry])
+        Fmaxabs = np.max([np.abs(Fmin), np.abs(Fmax)])
 
         arrowdict = {"shape": "full",
                      "length_includes_head": True,
-                     "head_width": Rmax / 20}
+                     "head_width": Fmaxabs / 20}
+
+        k_now = Pin(ax, {"closed":       True,
+                         "fill":         True,
+                         "edgecolor": "red",
+                         "facecolor": "red",
+                         "zorder":       50}, diameter=Fmaxabs / 20)
+
+        w_now = Pin(ax, {"closed":       True,
+                         "fill":         True,
+                         "edgecolor": "blue",
+                         "facecolor": "blue",
+                         "zorder":       50}, diameter=Fmaxabs / 20)
+
+        p_now = Pin(ax, {"closed":       True,
+                         "fill":         True,
+                         "edgecolor": "orange",
+                         "facecolor": "orange",
+                         "zorder":       50}, diameter=Fmaxabs / 20)
+
+        r_now = Pin(ax, {"closed":       True,
+                         "fill":         True,
+                         "edgecolor": "black",
+                         "facecolor": "black",
+                         "zorder":       50}, diameter=Fmaxabs / 20)
 
         kolben, = ax.plot(Fx, Fy, color="red", label="Fkolben")
-        ak      = ax.arrow(Fx[0], Fy[0], Fx[1] - Fx[0], Fy[1] - Fy[0], color="red", **arrowdict)
-
+        # ak      = ax.arrow(Fx[0], Fy[0], Fx[1] - Fx[0], Fy[1] - Fy[0], color="red", **arrowdict)
+        k_now.plot([Fx[0], Fy[0]], 0.)
 
         wange,  = ax.plot(Wx, Wy, color="blue", label="Fwange")
-        wk      = ax.arrow(Wx[0], Wy[0], Wx[1] - Wx[0], Wy[1] - Wy[0], color="blue", **arrowdict)
+        # wk      = ax.arrow(Wx[0], Wy[0], Wx[1] - Wx[0], Wy[1] - Wy[0], color="blue", **arrowdict)
+        w_now.plot([Wx[0], Wy[0]], 0.)
 
         pleuel, = ax.plot(Px, Py, color="orange", label="Fpleuel")
-        pk      = ax.arrow(Px[0], Py[0], Px[1] - Px[0], Py[1] - Py[0], color="orange", **arrowdict)
+        # pk      = ax.arrow(Px[0], Py[0], Px[1] - Px[0], Py[1] - Py[0], color="orange", **arrowdict)
+        p_now.plot([Px[0], Py[0]], 0.)
 
         kuw,    = ax.plot(Rx, Ry, color="black", label="ΣF")
-        kk      = ax.arrow(Rx[0], Ry[0], Rx[1] - Rx[0], Ry[1] - Ry[0], color="black", **arrowdict)
+        # kk      = ax.arrow(Rx[0], Ry[0], Rx[1] - Rx[0], Ry[1] - Ry[0], color="black", **arrowdict)
+        r_now.plot([Rx[0], Ry[0]], 0.)
 
         ax.legend()
         ax.set_xlabel("x [mm]")
         ax.set_ylabel("y [mm]")
         ax.set_aspect("equal")
 
-        plt.show()
+        ax.set_xlim([-1.2 * Fmaxabs, 1.2 * Fmaxabs])
+        ax.set_ylim([-1.2 * Fmaxabs, 1.2 * Fmaxabs])
+
+        def animate(frame: int):
+            k_now.plot([Fx[frame], Fy[frame]], 0.)
+            w_now.plot([Wx[frame], Wy[frame]], 0.)
+            p_now.plot([Px[frame], Py[frame]], 0.)
+            r_now.plot([Rx[frame], Ry[frame]], 0.)
+
+            return k_now, w_now, p_now, r_now
+
+        ani = animation.FuncAnimation(fig, animate, interval=100., frames=len(self.t), repeat=True)
+
+        if filename is not None:
+            print(f"[+] Saving animation to: {filename:s}.")
+            writergif = animation.PillowWriter(fps=10)
+            ani.save(filename, writer=writergif)
+
+        plt.show(block=True)
 
 
 
 
 if __name__ == "__main__":
-    name = "MB03_kurbeltrieb.gif"
-    name = None
+    if len(sys.argv) <= 1:
+        name = None
+    else:
+        name = str(sys.argv[1])
+        if not name.endswith(".gif"):
+            name += ".gif"
+
     kuw_r                 =    18.48     # mm
     conrod                =    65.5      # mm
     rpm                   = 13000.       # rot / min
@@ -574,5 +699,5 @@ if __name__ == "__main__":
                      m_pleuel = conrod_mass)
 
     kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
-    kt.plot_forces()
+    # kt.plot_forces()
 
