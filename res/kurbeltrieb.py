@@ -770,7 +770,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         gasdata = str(sys.argv[2])
     else:
-        gasdata = "./gasdata_rnd.asc"
+        gasdata = "./gasdata.asc"
 
 
     kuw_r                 =    18.48     # mm
@@ -794,5 +794,5 @@ if __name__ == "__main__":
                      zyl_durchmesser = zylinder_durchmesser)
 
     kt.plot_forces(gasdata = gasdata, filename = name)
-    # kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
+    kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
 
