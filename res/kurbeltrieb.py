@@ -284,7 +284,10 @@ unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
             a_x, a_y = self.kolben_axy(t)
             F_y = - a_y * self.m_k
         else:
-            F_y = -gaskraft
+            if isinstance(gaskraft, str):
+                F_y = self.gaskraft(t, gaskraft)
+            else:
+                F_y = gaskraft
 
         F_x = - F_y * np.tan(beta)
         M_z = - F_x * k_y
@@ -381,34 +384,33 @@ unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
         angle = []
         gpres = []
 
-        try:
-            gdfile = open(filename, "rt")
-            for line in gdfile:
+        with open(gasdata, "rt") as gpfile:
+            print(f"[+] reading gasdata from {gpfile.name:s}.")
+            for line in gpfile:
                 a, p = [float(v) for v in line.strip().split()]
-                if a > maxa:
-                    break
-                elif a < mina:
-                    continue
-                else:
-                    angle.append(a)
-                    gpres.append(p)
-
-        except IOError as e:
-            gdfile.close()
-
-        finally:
-            gdfile.close()
-
-        # TODO:
-        # resample !!!
+                angle.append(a)
+                gpres.append(p)
 
         angle = np.radians(np.array(angle, dtype=float))
         tt = angle / self.omega
-        gpres = np.array(gpres, dtype=float) * self.z_d
+        gpres = np.array(gpres, dtype=float)
 
-        gasdata = np.vstack([angle, gpres]).T
+        dt = np.mean(tt[1:] - tt[:-1])
+        while tt[0] > t[0]:
+            tt = np.hstack([tt - (tt[-1] + dt), tt])
+            gpres = np.hstack([gpres, gpres])
 
-        return gasdata
+        while tt[-1] < t[-1]:
+            tt = np.hstack([tt, tt + tt[-1] + dt])
+            gpres = np.hstack([gpres, gpres])
+
+        f = scipy.interpolate.interp1d(tt, gpres, kind="cubic")
+
+        # positive gas pressure means negative force
+        gkraft = -f(t) * 0.25 * np.pi * self.z_d ** 2
+
+        return gkraft
+
 
     def animate_kurbeltrieb(self, num_rotations: int = 2, filename: str = None):
         end_time = int(num_rotations) * ((2 * np.pi) / self.omega)
@@ -666,17 +668,18 @@ unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
         self.t = np.linspace(0., end_time, int(end_time / dt) + 1)
 
         Fx, Fy, _ = self.kolben_Fxy(self.t)
+        Gx, Gy, _ = self.kolben_Fxy(self.t, gasdata)
         Wx, Wy, _ = self.wange_Fxy(self.t)
         Pxy, Ppos = self.pleuel_Fxy(self.t)
         Px, Py, _ = Pxy
-        Rx = Fx + Wx + Px
-        Ry = Fy + Wy + Py
+        Rx = Fx + Wx + Px + Gx
+        Ry = Fy + Wy + Py + Gy
 
         fig = plt.figure()
         ax = fig.add_subplot()
 
-        Fmax = np.max([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry])
-        Fmin = np.min([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry])
+        Fmax = np.max([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry, Gx, Gy])
+        Fmin = np.min([Fx, Fy, Wx, Wy, Px, Py, Rx, Ry, Gx, Gy])
         Fmaxabs = np.max([np.abs(Fmin), np.abs(Fmax)])
 
         arrowdict = {"shape": "full",
@@ -701,26 +704,31 @@ unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
                          "facecolor": "orange",
                          "zorder":       50}, diameter=Fmaxabs / 20)
 
+        g_now = Pin(ax, {"closed":       True,
+                         "fill":         True,
+                         "edgecolor": "violet",
+                         "facecolor": "violet",
+                         "zorder":       50}, diameter=Fmaxabs / 20)
+
         r_now = Pin(ax, {"closed":       True,
                          "fill":         True,
                          "edgecolor": "black",
                          "facecolor": "black",
                          "zorder":       50}, diameter=Fmaxabs / 20)
 
-        kolben, = ax.plot(Fx, Fy, color="red", label="Fkolben")
-        # ak      = ax.arrow(Fx[0], Fy[0], Fx[1] - Fx[0], Fy[1] - Fy[0], color="red", **arrowdict)
+        kolben, = ax.plot(Fx, Fy, color="red", label="$F_{kolben}$")
         k_now.plot([Fx[0], Fy[0]], 0.)
 
-        wange,  = ax.plot(Wx, Wy, color="blue", label="Fwange")
-        # wk      = ax.arrow(Wx[0], Wy[0], Wx[1] - Wx[0], Wy[1] - Wy[0], color="blue", **arrowdict)
+        wange,  = ax.plot(Wx, Wy, color="blue", label="$F_{wange}$")
         w_now.plot([Wx[0], Wy[0]], 0.)
 
-        pleuel, = ax.plot(Px, Py, color="orange", label="Fpleuel")
-        # pk      = ax.arrow(Px[0], Py[0], Px[1] - Px[0], Py[1] - Py[0], color="orange", **arrowdict)
+        pleuel, = ax.plot(Px, Py, color="orange", label="$F_{pleuel}$")
         p_now.plot([Px[0], Py[0]], 0.)
 
-        kuw,    = ax.plot(Rx, Ry, color="black", label="ΣF")
-        # kk      = ax.arrow(Rx[0], Ry[0], Rx[1] - Rx[0], Ry[1] - Ry[0], color="black", **arrowdict)
+        gaskraft, = ax.plot(Gx, Gy, color="violet", label="$F_{gaskraft}$")
+        g_now.plot([Gx[0], Gy[0]], 0.)
+
+        kuw,    = ax.plot(Rx, Ry, color="black", label="$\sum{F}$")
         r_now.plot([Rx[0], Ry[0]], 0.)
 
         ax.legend()
@@ -735,6 +743,7 @@ unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
             k_now.plot([Fx[frame], Fy[frame]], 0.)
             w_now.plot([Wx[frame], Wy[frame]], 0.)
             p_now.plot([Px[frame], Py[frame]], 0.)
+            g_now.plot([Gx[frame], Gy[frame]], 0.)
             r_now.plot([Rx[frame], Ry[frame]], 0.)
 
             return k_now, w_now, p_now, r_now
@@ -754,10 +763,15 @@ unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
 if __name__ == "__main__":
     if len(sys.argv) <= 1:
         name = None
-    else:
+    if len(sys.argv) > 1:
         name = str(sys.argv[1])
         if not name.endswith(".gif"):
             name += ".gif"
+    if len(sys.argv) > 2:
+        gasdata = str(sys.argv[2])
+    else:
+        gasdata = "./gasdata_rnd.asc"
+
 
     kuw_r                 =    18.48     # mm
     conrod                =    65.5      # mm
@@ -779,5 +793,6 @@ if __name__ == "__main__":
                      m_pleuel        = conrod_mass,
                      zyl_durchmesser = zylinder_durchmesser)
 
-    kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
+    kt.plot_forces(gasdata = gasdata, filename = name)
+    # kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
 

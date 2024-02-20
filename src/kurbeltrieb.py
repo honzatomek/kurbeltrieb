@@ -44,7 +44,7 @@ ZORDER = {"wange":   0,
           "pleuel": 30,
           "bolzen": 20,}
 
-STEPS_PER_ROTATION = 101
+STEPS_PER_ROTATION = 51
 
 #------------------------------------------------------------- LOGGING SETUP ---#
 def addLoggingLevel(levelName, levelNum, methodName=None):
@@ -327,6 +327,9 @@ class Part:
         acc = concat(x, y, a)
         return acc
 
+    def frc(self, a: float = 0., u: float = 0., q: float = 0., p: list = None) -> np.ndarray:
+        pass
+
 
 
 class Kolben(Part):
@@ -347,6 +350,9 @@ class Kolben(Part):
                                 [       w / 2., - 0.5 * h / 2.],
                                 [-0.5 * w / 2.,        -h / 2.]], dtype=float)
         self.points += np.array([0., h / 6], dtype=float)
+
+    def frc(self, a: float = 0., u: float = 0., q: float = 0., p: list = None) -> np.ndarray:
+        acc = self.acc(a, u, q, p)
 
 
 
@@ -715,4 +721,6 @@ if __name__ == "__main__":
     kt.lambdify()
     kt.set_p(default_kurbeltrieb)
     kt.animate(1)
+
+    frc = kt.KOL.frc(0., 2. * np.pi, 0.)
 

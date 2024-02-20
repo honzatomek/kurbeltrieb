@@ -47,7 +47,7 @@ def plot_gasdata(gasdata: Union[np.ndarray, str] = "gasdata.asc"):
     plt.show()
 
 
-def create_gasdata(minp: float = 2., maxp: float = 40.):
+def create_gasdata(minp: float = 2., maxp: float = 40., add_random: bool=True):
     #                           deg   bar
     control_points = np.array([[ 0.,  35.],
                                [ 10., 40.],
@@ -74,8 +74,9 @@ def create_gasdata(minp: float = 2., maxp: float = 40.):
     gpres *= 0.1
 
     # add a bit of randomness
-    rnd = (np.random.rand(gpres.shape[0]) * 2 - 1) * (0.005 * maxp)
-    gpres += rnd
+    if add_random:
+        rnd = (np.random.rand(gpres.shape[0]) * 2 - 1) * (0.005 * maxp)
+        gpres += rnd
 
     gasdata = np.vstack([angle, gpres]).T
 
@@ -145,7 +146,7 @@ if __name__ == "__main__":
     # plot_gasdata(gd)
     # write_gasdata("gasdata_rnd.asc", gd)
 
-    gd = create_gasdata()
+    gd = create_gasdata(add_random=True)
     write_gasdata("gasdata_rnd.asc", gd)
     angle, pressure = gd[:, 0], gd[:, 1]
     rpm = 13000.
