@@ -3,6 +3,7 @@
 import os
 import sys
 import numpy as np
+import scipy
 import warnings
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
@@ -17,6 +18,8 @@ DIGITS = 5
 EPS_TOL = 10. ** (-DIGITS)
 PLEUEL_DISCRETISATION = 10
 TIME_DISCRETISATION = 1000.
+
+plt.rcParams["font.family"] = "monospace"
 
 
 class PltObject:
@@ -133,25 +136,43 @@ class Vector(PltObject):
 
 
 class Kurbeltrieb:
-    def __init__(self, hub: float = 10., pleuel: float = 70., rpm: float = 9300., m_kolben: float = 112.E-6, unwucht: tuple = (0.002267815, 4.974311637), m_pleuel: float = 58.7E-6):
+    def __init__(self, hub: float = 10., pleuel: float = 70., rpm: float = 9300.,
+                 m_kolben: float = 112.E-6, unwucht: tuple = (0.002267815, 4.974311637),
+                 m_pleuel: float = 58.7E-6, zyl_durchmesser: float = 54.0):
         """Kurbeltrieb setup - use consistent units (e.g. mm/s/rad/tonnes etc.)
 
         Args:
-            hub (float):       the cranshaft stroke length
-            pleuel (float):    the conrod length
-            rpm (float):       the motor Rotations per Minute
-            m_kolben (float):  the piston mass
-            unwucht (tuple):   (the imbalance in mass * length, the angle of the imbalance from y-axis when piston is in OT)
+            hub (float):             the cranshaft stroke length
+            pleuel (float):          the conrod length
+            rpm (float):             the motor Rotations per Minute
+            m_kolben (float):        the piston mass
+            unwucht (tuple):         (the imbalance in mass * length, the angle of the imbalance from y-axis when piston is in OT)
+            m_pleuel (float):        the conrod mass
+            zyl_durchmesser (float): the cylinder diameter
         """
         self.h = hub
         self.p = pleuel
         self.alpha0 = np.pi / 2.            # OT position
+        self.rpm = rpm
         self.omega = 2 * np.pi * rpm / 60.  # rad / s
         self.m_k = m_kolben # t
         self.m_p = m_pleuel # t
         self.u_w = unwucht  # (Unwucht Wange + Schwungrad t * mm, Unwucht Winkel von x-Achse wann Kolben im OT [rad])
+        self.z_d = zyl_durchmesser
 
         self.t = [0.]  # initial time for animation
+
+    def __str__(self) -> str:
+        info = f"""Kurbeltrieb Mechanism
+
+rpm:     {self.rpm: 5.0f} U / min
+hub:     {self.h: 9.3f} mm
+pleuel:  {self.p: 9.3f} mm
+kolben:  {self.m_k * 1.E+6: 9.3f} g
+pleuel:  {self.m_p * 1.E+6: 9.3f} g
+unwucht: {self.u_w[0] * 1.E+6: 9.3f} g mm
+         {np.degrees(self.u_w[1]):9.3f} deg vom OT"""
+        return info
 
     def alpha(self, t):
         """KUW angular position from OT as a function of time."""
@@ -244,17 +265,29 @@ class Kurbeltrieb:
         return (hx + (kx - hx) * position).flatten(), (hy + (ky - hy) * position).flatten()
 
 
-    def kolben_Fxy(self, t):
-        """forces from kolben motion acting on the kolben"""
+    def kolben_Fxy(self, t, gaskraft = None):
+        """forces from kolben motion acting on the kolben
+
+        Args:
+            t (float):        time vector
+            gaskraft (float): gasdata of the same length as time vector
+
+        Returns:
+            (float, float, float): (Fx, Fy, Mz) forces into KUW Lager from gaskraft (if supplied)
+                                   or from piston motion (if gaskraft = None)
+        """
         # A = self.alpha(t)
         k_x, k_y = self.kolben_xy(t)
-        a_x, a_y = self.kolben_axy(t)
-
         beta = self.beta(t)
 
-        F_y = - a_y * self.m_k
+        if gaskraft is None:
+            a_x, a_y = self.kolben_axy(t)
+            F_y = - a_y * self.m_k
+        else:
+            F_y = -gaskraft
+
         F_x = - F_y * np.tan(beta)
-        M_z = F_x * k_x
+        M_z = - F_x * k_y
 
         return F_x.flatten(), F_y.flatten(), M_z.flatten()
 
@@ -266,8 +299,10 @@ class Kurbeltrieb:
 
         W_x = W_r * np.cos(gamma)
         W_y = W_r * np.sin(gamma)
+        # TODO:
+        M_z = np.zeros(W_x.shape[0])
 
-        return W_x.flatten(), W_y.flatten()
+        return W_x.flatten(), W_y.flatten(), M_z.flatten()
 
     def pleuel_Fxy(self, t):
         """forces from pleuel movement acting on KUW bearings"""
@@ -325,7 +360,10 @@ class Kurbeltrieb:
 
         xy = self.pleuel_xy(t     , position=r / self.p)
 
-        return (Psum[:,0].flatten(), Psum[:,1].flatten()), np.array(xy, dtype=float)
+        # TODO:
+        Mz = -Psum[:,0].flatten() * xy[1].flatten() + Psum[:,1].flatten() * xy[0].flatten()
+
+        return (Psum[:,0].flatten(), Psum[:,1].flatten(), Mz.flatten()), np.array(xy, dtype=float)
 
     def lager_Fxy(self, t):
         """forces from wange and kolben acting on the KUW bearings"""
@@ -336,6 +374,41 @@ class Kurbeltrieb:
         Px, Py = np.sum(Pxy, axis=0)
 
         return (Wx + Fx + Px).flatten(), (Wy + Fy + Py).flatten()
+
+
+    def gaskraft(self, t, gasdata: str):
+        """read in gasdata from file and convert them to time dependent force on piston"""
+        angle = []
+        gpres = []
+
+        try:
+            gdfile = open(filename, "rt")
+            for line in gdfile:
+                a, p = [float(v) for v in line.strip().split()]
+                if a > maxa:
+                    break
+                elif a < mina:
+                    continue
+                else:
+                    angle.append(a)
+                    gpres.append(p)
+
+        except IOError as e:
+            gdfile.close()
+
+        finally:
+            gdfile.close()
+
+        # TODO:
+        # resample !!!
+
+        angle = np.radians(np.array(angle, dtype=float))
+        tt = angle / self.omega
+        gpres = np.array(gpres, dtype=float) * self.z_d
+
+        gasdata = np.vstack([angle, gpres]).T
+
+        return gasdata
 
     def animate_kurbeltrieb(self, num_rotations: int = 2, filename: str = None):
         end_time = int(num_rotations) * ((2 * np.pi) / self.omega)
@@ -351,11 +424,11 @@ class Kurbeltrieb:
         vx, vy    = self.kolben_vxy(self.t)
         ax, ay    = self.kolben_axy(self.t)
         Fx, Fy, _ = self.kolben_Fxy(self.t)
-        Wx, Wy    = self.wange_Fxy(self.t)
+        Wx, Wy,_  = self.wange_Fxy(self.t)
 
         Pxy, Ppos = self.pleuel_Fxy(self.t)
 
-        Px, Py = Pxy
+        Px, Py, _ = Pxy
         Pxy = np.array(Pxy, dtype=float)
 
         Rx = Fx + Wx + Px
@@ -548,6 +621,9 @@ class Kurbeltrieb:
         fig.suptitle("Kurbeltrieb Inertia Forces decomposition using Numerical Analysis")
         fig.tight_layout()
 
+        txt = fig.text(0.75, 0.85, str(self), horizontalalignment="left", verticalalignment="top")
+
+#-----------------------------------------------------------------------------------------------#
 
         def animate(frame: int):
             kolben.plot(np.array([kx[frame], ky[frame]], dtype=float), alpha=0.)
@@ -583,16 +659,16 @@ class Kurbeltrieb:
 
         plt.show(block=True)
 
-    def plot_forces(self, filename: str = None):
+    def plot_forces(self, gasdata: str = None, filename: str = None):
         end_time = ((2 * np.pi) / self.omega)
 
         dt = (2 * np.pi) / self.omega / TIMESTEPS_PER_ROTATION
         self.t = np.linspace(0., end_time, int(end_time / dt) + 1)
 
         Fx, Fy, _ = self.kolben_Fxy(self.t)
-        Wx, Wy    = self.wange_Fxy(self.t)
+        Wx, Wy, _ = self.wange_Fxy(self.t)
         Pxy, Ppos = self.pleuel_Fxy(self.t)
-        Px, Py = Pxy
+        Px, Py, _ = Pxy
         Rx = Fx + Wx + Px
         Ry = Fy + Wy + Py
 
@@ -691,15 +767,17 @@ if __name__ == "__main__":
     kuw_mass              =     1.105E-3 # t - inluding Hubzapfenlager
     kuw_excentricity      =     2.05137  # mm
     kuw_angle_COG_from_OT = np.pi        # rad
+    zylinder_durchmesser =     54.       # mm
 
     unwucht = (kuw_mass * kuw_excentricity, kuw_angle_COG_from_OT)
 
-    kt = Kurbeltrieb(hub      = 2 * kuw_r,
-                     pleuel   = conrod,
-                     rpm      = rpm,
-                     m_kolben = kolben_mass,
-                     unwucht  = unwucht,
-                     m_pleuel = conrod_mass)
+    kt = Kurbeltrieb(hub             = 2 * kuw_r,
+                     pleuel          = conrod,
+                     rpm             = rpm,
+                     m_kolben        = kolben_mass,
+                     unwucht         = unwucht,
+                     m_pleuel        = conrod_mass,
+                     zyl_durchmesser = zylinder_durchmesser)
 
     kt.animate_kurbeltrieb(num_rotations = 3, filename = name)
 
