@@ -14,9 +14,9 @@ def read_gasdata(filename: str = "gasdata.asc", mina: float = -np.inf, maxa: flo
     angle = []
     gpres = []
 
-    try:
-        gdfile = open(filename, "rt")
-        for line in gdfile:
+    with open(filename, "rt") as gpfile:
+        print(f"[+] Reading {gpfile.name:s}.")
+        for line in gpfile:
             a, p = [float(v) for v in line.strip().split()]
             if a > maxa:
                 break
@@ -25,12 +25,6 @@ def read_gasdata(filename: str = "gasdata.asc", mina: float = -np.inf, maxa: flo
             else:
                 angle.append(a)
                 gpres.append(p)
-
-    except IOError as e:
-        gdfile.close()
-
-    finally:
-        gdfile.close()
 
     angle = np.array(angle, dtype=float)
     gpres = np.array(gpres, dtype=float)
@@ -53,14 +47,17 @@ def plot_gasdata(gasdata: Union[np.ndarray, str] = "gasdata.asc"):
     plt.show()
 
 
-def create_gasdata(maxp: float = 40.):
+def create_gasdata(minp: float = 2., maxp: float = 40.):
     #                           deg   bar
     control_points = np.array([[ 0.,  35.],
                                [ 10., 40.],
-                               [ 80., 20.],
-                               [180., 10.],
-                               [220., 10.],
-                               [320., 20.]], dtype=float) * (maxp / 40.)
+                               [ 70., 15.],
+                               [120.,  5.],
+                               [160.,  2.],
+                               [180.,  2.],
+                               [200.,  2.],
+                               [240.,  4.],
+                               [320., 20.]], dtype=float)
 
     offset = np.array([360., 0.], dtype=float)
     periodic = np.vstack([control_points - offset, control_points, control_points + offset])
@@ -69,6 +66,9 @@ def create_gasdata(maxp: float = 40.):
 
     angle = np.arange(0., 360., 1.)
     gpres  = f(angle)
+
+    gpresmin, gpresmax = np.min(gpres), np.max(gpres)
+    gpres = minp + (gpres - gpresmin) * (maxp - minp) / (gpresmax - gpresmin)
 
     # convert to MPa
     gpres *= 0.1
@@ -84,6 +84,7 @@ def create_gasdata(maxp: float = 40.):
 
 def write_gasdata(filename: str, gasdata: np.ndarray):
     with open(filename, "wt") as gpfile:
+        print(f"[+] Writing {gpfile.name:s}.")
         for a, p in gasdata:
             gpfile.write(f"{a:12.4f} {p:12.5f}\n")
 
@@ -130,6 +131,7 @@ def harmonic_decomp(t: np.ndarray, y: np.ndarray) -> np.ndarray:
 
 
 def harmonic_comp(t: np.ndarray, fft: np.ndarray):
+    print(f"[+] Combining decomposed time curve")
     res = np.zeros(t.shape[0])
     for f, A, B in fft:
         res += A * np.cos(2. * np.pi * f * t) + B * np.sin(2. * np.pi * f * t)
@@ -144,6 +146,7 @@ if __name__ == "__main__":
     # write_gasdata("gasdata_rnd.asc", gd)
 
     gd = create_gasdata()
+    write_gasdata("gasdata_rnd.asc", gd)
     angle, pressure = gd[:, 0], gd[:, 1]
     rpm = 13000.
     omega = rpm / 60. * 2 * np.pi
